@@ -1,4 +1,4 @@
-"""Config flow for CarSentry — prefers Supervisor addon discovery."""
+"""Config flow for CarSentry — auto-discovers addon, host/port optional."""
 
 from __future__ import annotations
 
@@ -10,20 +10,43 @@ from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import CarSentryApi
-from .const import (
-    CONF_BASE_URL,
-    DEFAULT_PORT,
-    DOMAIN,
-)
+from .const import CONF_BASE_URL, DEFAULT_PORT, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
-        vol.Optional(CONF_HOST, default=""): str,
-        vol.Optional(CONF_PORT, default=DEFAULT_PORT): int,
+        vol.Optional(CONF_HOST): str,
+        vol.Optional(CONF_PORT): int,
     }
 )
+
+
+def _candidates(host: str | None = None, port: int | None = None) -> list[str]:
+    urls: list[str] = []
+    if host:
+        p = port or DEFAULT_PORT
+        urls.append(f"http://{host.strip()}:{p}")
+    urls.extend(
+        [
+            "http://carsentry:8000",
+            "http://local-carsentry:8000",
+            "http://a0d7b954-carsentry:8000",
+            "http://127.0.0.1:8000",
+            "http://127.0.0.1:8010",
+            "http://localhost:8000",
+            "http://localhost:8010",
+            "http://homeassistant.local:8010",
+            "http://homeassistant:8010",
+        ]
+    )
+    seen: set[str] = set()
+    out: list[str] = []
+    for u in urls:
+        if u not in seen:
+            seen.add(u)
+            out.append(u)
+    return out
 
 
 async def _try_url(session, url: str) -> bool:
@@ -41,59 +64,36 @@ class CarSentryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     async def async_step_user(self, user_input=None):
-        errors = {}
+        errors: dict[str, str] = {}
         session = async_get_clientsession(self.hass)
 
-        # Auto-discovery candidates (no manual port needed when possible)
-        candidates = [
-            # Supervisor ingress / internal addon network
-            "http://carsentry:8000",
-            "http://local-carsentry:8000",
-            "http://a0d7b954-carsentry:8000",
-            # Common host mappings
-            "http://127.0.0.1:8010",
-            "http://localhost:8010",
-            "http://homeassistant.local:8010",
-            "http://homeassistant:8010",
-        ]
-
         if user_input is None:
-            # Try auto-discovery first
-            for url in candidates:
+            for url in _candidates():
                 if await _try_url(session, url):
-                    await self.async_set_unique_id("carsentry")
+                    await self.async_set_unique_id(DOMAIN)
                     self._abort_if_unique_id_configured()
                     return self.async_create_entry(
                         title="CarSentry",
                         data={CONF_BASE_URL: url},
                     )
-            # Show form if nothing found
             return self.async_show_form(
                 step_id="user",
                 data_schema=STEP_USER_DATA_SCHEMA,
                 errors={},
-                description_placeholders={
-                    "hint": "Addon не найден автоматически. Укажите host/port или проверьте, что CarSentry Addon запущен."
-                },
             )
 
-        # Manual path
-        host = (user_input.get(CONF_HOST) or "").strip()
-        port = user_input.get(CONF_PORT) or DEFAULT_PORT
+        host = (user_input.get(CONF_HOST) or "").strip() or None
+        port = user_input.get(CONF_PORT)
 
-        if host:
-            base_url = f"http://{host}:{port}"
-        else:
-            # empty host → try defaults again with given port
-            base_url = f"http://127.0.0.1:{port}"
-
-        if await _try_url(session, base_url):
-            await self.async_set_unique_id("carsentry")
-            self._abort_if_unique_id_configured()
-            return self.async_create_entry(
-                title="CarSentry",
-                data={CONF_BASE_URL: base_url, CONF_HOST: host, CONF_PORT: port},
-            )
+        for url in _candidates(host, port):
+            if await _try_url(session, url):
+                await self.async_set_unique_id(DOMAIN)
+                self._abort_if_unique_id_configured()
+                data = {CONF_BASE_URL: url}
+                if host:
+                    data[CONF_HOST] = host
+                    data[CONF_PORT] = port or DEFAULT_PORT
+                return self.async_create_entry(title="CarSentry", data=data)
 
         errors["base"] = "cannot_connect"
         return self.async_show_form(

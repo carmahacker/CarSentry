@@ -3,15 +3,15 @@
     "step": {
       "user": {
         "title": "CarSentry",
-        "description": "Обычно addon находится автоматически через внутреннюю сеть Supervisor — host/port указывать не нужно. Заполните поля только если автообнаружение не сработало.",
+        "description": "Оставьте поля пустыми, если установлен CarSentry Addon — интеграция найдёт его сама.\n\nHost/port нужны только для внешнего/standalone контейнера.",
         "data": {
           "host": "Host (необязательно)",
-          "port": "Port (необязательно, по умолчанию 8010)"
+          "port": "Port (необязательно)"
         }
       }
     },
     "error": {
-      "cannot_connect": "Не удалось подключиться к CarSentry. Убедитесь, что addon запущен, либо укажите правильный host/port."
+      "cannot_connect": "CarSentry недоступен. Запустите Addon (или контейнер) и повторите. Host/port — только для standalone."
     },
     "abort": {
       "already_configured": "CarSentry уже настроен."
