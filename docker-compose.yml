@@ -1,0 +1,21 @@
+services:
+  carsentry:
+    build:
+      context: .
+      dockerfile: addon/Dockerfile
+    container_name: carsentry
+    restart: unless-stopped
+    ports:
+      - "8010:8000"
+    environment:
+      - TZ=Europe/Moscow
+      - ANPR_YOLO_MODEL=/models/anpr/yolo/best.pt
+      - ANPR_OCR_MODEL=/models/anpr/ocr/crnn_ocr_model_int8_fx.pth
+      - ANPR_OCR_DEVICE=cpu
+    volumes:
+      - carsentry-data:/data
+    # Uncomment if you want to override models at runtime:
+    # - ./models/anpr:/models/anpr:ro
+
+volumes:
+  carsentry-data:

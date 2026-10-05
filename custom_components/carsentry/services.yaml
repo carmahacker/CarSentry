@@ -1,0 +1,44 @@
+discover_rtsp:
+  name: Discover RTSP
+  description: Try common RTSP URL patterns for a camera and return the working one.
+  fields:
+    host:
+      name: Host / IP
+      description: Camera IP address or hostname
+      required: true
+      example: "192.168.1.64"
+      selector:
+        text:
+    username:
+      name: Username
+      description: Camera username (optional)
+      required: false
+      selector:
+        text:
+    password:
+      name: Password
+      description: Camera password (optional)
+      required: false
+      selector:
+        text:
+    port:
+      name: RTSP port
+      description: Usually 554
+      required: false
+      default: 554
+      selector:
+        number:
+          min: 1
+          max: 65535
+
+verify_rtsp:
+  name: Verify RTSP
+  description: Check that an arbitrary RTSP URL can be opened and a frame is readable.
+  fields:
+    rtsp_url:
+      name: RTSP URL
+      description: Full RTSP URL including credentials if needed
+      required: true
+      example: "rtsp://user:pass@192.168.1.64:554/Streaming/Channels/101"
+      selector:
+        text:

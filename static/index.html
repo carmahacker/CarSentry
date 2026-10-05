@@ -1,0 +1,2265 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CarSentry</title>
+
+<style>
+body{
+    font-family:system-ui,sans-serif;
+    background:#f5f6f8;
+    margin:0;
+    color:#20242a
+}
+header{
+    background:#171a1f;
+    color:#fff;
+    padding:16px 22px
+}
+main{
+    max-width:1250px;
+    margin:20px auto;
+    padding:0 16px
+}
+.tabs{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    margin-bottom:16px
+}
+.tabs button{
+    padding:9px 14px;
+    border:0;
+    border-radius:8px;
+    cursor:pointer
+}
+.tabs button.active{
+    background:#171a1f;
+    color:white
+}
+.panel{
+    display:none;
+    background:white;
+    border-radius:12px;
+    padding:18px;
+    box-shadow:0 1px 5px #0001
+}
+.panel.active{
+    display:block
+}
+.grid{
+    display:grid;
+    grid-template-columns:repeat(
+        auto-fit,
+        minmax(220px,1fr)
+    );
+    gap:12px
+}
+label{
+    display:block;
+    font-size:13px;
+    margin-bottom:10px
+}
+input,select,textarea{
+    width:100%;
+    box-sizing:border-box;
+    padding:8px;
+    margin-top:4px;
+    border:1px solid #ccd1d8;
+    border-radius:7px;
+    font-family:inherit
+}
+textarea{
+    min-height:100px;
+    resize:vertical
+}
+input[type=checkbox]{
+    width:auto;
+    margin-right:6px
+}
+button.save{
+    background:#1769e0;
+    color:white;
+    border:0;
+    border-radius:7px;
+    padding:9px 14px;
+    cursor:pointer
+}
+button{
+    cursor:pointer
+}
+table{
+    width:100%;
+    border-collapse:collapse;
+    margin-top:15px
+}
+td,th{
+    padding:8px;
+    border-bottom:1px solid #eee;
+    text-align:left;
+    font-size:13px
+}
+.thumb{
+    width:130px;
+    height:75px;
+    object-fit:cover;
+    border-radius:6px
+}
+.hint{
+    font-size:12px;
+    color:#737983;
+    margin-top:-5px;
+    margin-bottom:10px
+}
+.webhook{
+    background:#f7f8fa;
+    padding:12px;
+    border-radius:8px;
+    margin:8px 0 14px
+}
+.badge{
+    display:inline-block;
+    padding:3px 7px;
+    border-radius:5px;
+    background:#eee;
+    font-size:12px
+}
+
+.parking-car-card{
+    border:1px solid #444;
+    border-radius:10px;
+    padding:12px;
+    margin:10px 0;
+}
+
+.parking-car-card .row{
+    display:flex;
+    gap:12px;
+    align-items:center;
+    flex-wrap:wrap;
+}
+
+.parking-car-state{
+    font-weight:700;
+}
+
+.parking-car-state.home{
+    color:#2e9b52;
+}
+
+.parking-car-state.away{
+    color:#888;
+}
+
+.parking-car-actions{
+    margin-top:10px;
+    display:flex;
+    gap:8px;
+}
+
+.muted{
+    opacity:.7;
+}
+
+</style>
+</head>
+
+<body>
+
+<header>
+    <b>🚗 CarSentry</b>
+    <span id="health" style="float:right"></span>
+</header>
+
+<main>
+
+<div class="tabs">
+    <button data-tab="cams" class="active">Камеры</button>
+    <button data-tab="cars">Машины</button>
+    <button data-tab="events">События</button>
+    <button data-tab="tg">Telegram</button>
+    <button data-tab="anpr">ANPR</button>
+    <button data-tab="app">Приложение</button>
+    <button data-tab="webhooks">Вебхуки</button>
+</div>
+
+
+<!-- =====================================================
+     CAMERAS
+====================================================== -->
+
+<section id="cams" class="panel active">
+
+<h2>Камеры</h2>
+
+<div id="cameraList"></div>
+
+<h3>Добавить / изменить</h3>
+
+<form id="camForm">
+
+<input type="hidden" id="cid">
+
+<div class="grid">
+
+<label>
+    Название
+    <input id="name">
+</label>
+
+<label>
+    Режим работы
+    <select id="purpose">
+        <option value="entry">Въезд</option>
+        <option value="parking">Парковка</option>
+    </select>
+</label>
+
+<label>
+    Источник видео
+    <select id="source_type">
+        <option value="rtsp">RTSP (прямое подключение)</option>
+        <option value="ha_camera">Камера Home Assistant</option>
+    </select>
+</label>
+
+<label id="haEntityLabel" style="display:none">
+    Entity ID камеры HA
+    <input id="ha_entity_id" placeholder="camera.front_gate">
+</label>
+
+<label>
+    Host / IP (для автоопределения RTSP)
+    <input id="cam_host" placeholder="192.168.1.64">
+</label>
+
+<label>
+    Логин
+    <input id="user">
+</label>
+
+<label>
+    Пароль
+    <input
+        id="pass"
+        type="password"
+        placeholder="пусто = не менять"
+    >
+</label>
+
+<label style="grid-column: 1 / -1" id="rtspBlock">
+    RTSP URL
+    <div style="display:flex;gap:8px;align-items:center">
+        <input id="rtsp" style="flex:1">
+        <button type="button" id="btnDiscoverRtsp" class="secondary">🔍 Автоопределение RTSP</button>
+        <button type="button" id="btnVerifyRtsp" class="secondary">Проверить</button>
+    </div>
+    <div id="rtspStatus" style="font-size:0.85em;margin-top:4px;color:#888"></div>
+</label>
+
+<label>
+    Триггер захвата
+    <select id="mode">
+        <option value="motion">По движению</option>
+        <option value="interval">По интервалу</option>
+    </select>
+</label>
+
+<label>
+    Интервал, сек
+    <input
+        id="interval"
+        type="number"
+        step="0.5"
+        value="10"
+    >
+</label>
+
+<label>
+    Кадров за событие
+    <input
+        id="frames"
+        type="number"
+        value="3"
+    >
+</label>
+
+<label>
+    Задержка кадров, мс
+    <input
+        id="delay"
+        type="number"
+        value="250"
+    >
+</label>
+
+<label>
+    Motion threshold
+    <input
+        id="mt"
+        type="number"
+        value="25"
+    >
+</label>
+
+<label>
+    Min changed ratio
+    <input
+        id="mr"
+        type="number"
+        step="0.001"
+        value="0.01"
+    >
+</label>
+
+<label>
+    Motion idle, сек
+    <input
+        id="mi"
+        type="number"
+        step="0.1"
+        value="2"
+    >
+</label>
+
+<label>
+    Motion cooldown, сек
+    <input
+        id="mc"
+        type="number"
+        step="0.5"
+        value="10"
+    >
+</label>
+
+<label>
+    Кулдаун номера, сек
+    <input
+        id="pc"
+        type="number"
+        step="0.5"
+        value="30"
+    >
+</label>
+
+<label>
+    Режим срабатывания номера
+    <select id="plateTriggerMode">
+        <option value="until_gone">
+            До исчезновения номера
+        </option>
+        <option value="cooldown">
+            Кулдаун
+        </option>
+    </select>
+</label>
+
+</div>
+
+
+<div class="hint">
+    «До исчезновения номера» — один Event,
+    пока этот номер продолжает распознаваться.
+    Новое срабатывание после отсутствия номера
+    указанное количество секунд.
+    «Кулдаун» — повтор блокируется на указанное
+    количество секунд независимо от дальнейших
+    распознаваний.
+</div>
+
+
+<div class="webhook">
+
+<strong>Webhook при совпадении номера</strong>
+
+<div class="grid" style="margin-top:10px">
+
+<label>
+    <input
+        id="wh_en"
+        type="checkbox"
+    >
+    Включить webhook
+</label>
+
+<label>
+    Webhook
+    <select id="wh_id">
+        <option value="">
+            — не выбран —
+        </option>
+    </select>
+</label>
+
+<label>
+    Номер-триггер
+    <input
+        id="wh_plate"
+        placeholder="H379CY198"
+    >
+</label>
+
+</div>
+
+<div class="hint">
+Webhook выполняется только после успешного
+распознавания номера и только при точном
+совпадении с номером-триггером.
+Повторное срабатывание блокируется
+кулдауном номера, который хранится в SQLite.
+</div>
+
+</div>
+
+
+<label>
+    <input
+        id="enabled"
+        type="checkbox"
+        checked
+    >
+    Включена
+</label>
+
+<label>
+    <input
+        id="ctg"
+        type="checkbox"
+        checked
+    >
+    Отправлять в Telegram
+</label>
+
+<button class="save">
+    Сохранить
+</button>
+
+<button
+    type="button"
+    onclick="resetCam()"
+>
+    Новая
+</button>
+
+</form>
+
+</section>
+
+
+<!-- =====================================================
+     EVENTS
+====================================================== -->
+
+<section id="events" class="panel">
+
+<h2>События</h2>
+
+<button onclick="loadEvents()">
+    Обновить
+</button>
+
+<div id="eventList"></div>
+
+</section>
+
+
+<!-- =====================================================
+     TELEGRAM
+====================================================== -->
+
+<section id="tg" class="panel">
+
+<h2>Telegram</h2>
+
+<form id="tgForm">
+
+<div class="grid">
+
+<label>
+    <input id="tgen" type="checkbox">
+    Включен
+</label>
+
+<label>
+    Bot token
+    <input
+        id="token"
+        type="password"
+        placeholder="пусто = оставить текущий"
+    >
+</label>
+
+<label>
+    Chat ID
+    <input id="chat">
+</label>
+
+<label>
+    Thread ID
+    <input id="thread">
+</label>
+
+<label>
+    <input
+        id="proxyen"
+        type="checkbox"
+    >
+    SOCKS5 proxy
+</label>
+
+<label>
+    Proxy host
+    <input id="phost">
+</label>
+
+<label>
+    Proxy port
+    <input
+        id="pport"
+        type="number"
+    >
+</label>
+
+</div>
+
+<button class="save">
+    Сохранить
+</button>
+
+<button
+    type="button"
+    onclick="testTG()"
+>
+    Тест
+</button>
+
+</form>
+
+</section>
+
+
+<!-- =====================================================
+     ANPR
+====================================================== -->
+
+<section id="anpr" class="panel">
+
+<h2>ANPR</h2>
+
+<form id="anprForm">
+
+<div class="grid">
+
+<label>
+    Confidence
+    <input
+        id="conf"
+        type="number"
+        step="0.01"
+    >
+</label>
+
+<label>
+    Vote frames
+    <input
+        id="votes"
+        type="number"
+    >
+</label>
+
+<label>
+    Device
+    <input id="device">
+</label>
+
+</div>
+
+<button class="save">
+    Сохранить
+</button>
+
+</form>
+
+</section>
+
+
+<!-- =====================================================
+     APP
+====================================================== -->
+
+<section id="app" class="panel">
+
+<h2>Приложение</h2>
+
+<form id="appForm">
+
+<div class="grid">
+
+<label>
+    Хранить снимки, дней
+    <input
+        id="ret"
+        type="number"
+    >
+</label>
+
+<label>
+    Проверка камер, сек
+    <input
+        id="sync"
+        type="number"
+    >
+</label>
+
+</div>
+
+<button class="save">
+    Сохранить
+</button>
+
+</form>
+
+</section>
+
+
+<!-- =====================================================
+     WEBHOOKS
+====================================================== -->
+
+
+<section id="cars" class="panel">
+
+<h2>Машины</h2>
+
+<p class="muted">
+  До 10 автомобилей. В режиме «Парковка» состояние каждой машины
+  отслеживается отдельно.
+</p>
+
+<div id="parkingCarsList"></div>
+
+<h3>Добавить / изменить машину</h3>
+
+<form id="parkingCarForm">
+
+<input type="hidden" id="parkingCarId">
+
+<label>
+  Название
+  <input id="parkingCarName"
+         required
+         placeholder="Jolion">
+</label>
+
+<label>
+  Номер
+  <input id="parkingCarPlate"
+         required
+         placeholder="А123ВС777">
+</label>
+
+<label>
+  Webhook
+  <select id="parkingCarWebhook">
+    <option value="">Не использовать</option>
+  </select>
+</label>
+
+<label>
+  Значение HOME
+  <input id="parkingCarHomeValue"
+         value="home"
+         placeholder="jolion_at_home">
+</label>
+
+<label>
+  Значение AWAY
+  <input id="parkingCarAwayValue"
+         value="away"
+         placeholder="jolion_away">
+</label>
+
+<label>
+  Таймаут отсутствия, сек.
+  <input id="parkingCarAbsenceTimeout"
+         type="number"
+         min="1"
+         step="1"
+         value="30">
+</label>
+
+<label class="check">
+  <input id="parkingCarEnabled"
+         type="checkbox"
+         checked>
+  Включена
+</label>
+
+<div style="margin-top:12px">
+  <button type="submit">Сохранить машину</button>
+  <button type="button" id="parkingCarCancel">Отмена</button>
+</div>
+
+</form>
+
+</section>
+
+<section id="webhooks" class="panel">
+
+<h2>Вебхуки</h2>
+
+<div id="webhookList"></div>
+
+<h3>Добавить / изменить webhook</h3>
+
+<form id="webhookForm">
+
+<input type="hidden" id="wid">
+
+<div class="grid">
+
+<label>
+    Название
+    <input
+        id="wname"
+        placeholder="home_assistant_gate"
+        required
+    >
+</label>
+
+<label>
+    URL
+    <input
+        id="wurl"
+        placeholder="http://10.254.0.23:8123/api/services/script/turn_on_evening_lights"
+        required
+    >
+</label>
+
+<label>
+    Метод
+    <select id="wmethod">
+        <option value="POST">POST</option>
+        <option value="GET">GET</option>
+    </select>
+</label>
+
+<label>
+    Timeout, сек
+    <input
+        id="wtimeout"
+        type="number"
+        step="0.5"
+        value="20"
+    >
+</label>
+
+</div>
+
+<label>
+    HTTP Headers JSON
+    <textarea
+        id="wheaders"
+        placeholder='{
+  "Authorization": "Bearer eyJ...",
+  "Content-Type": "application/json"
+}'></textarea>
+</label>
+
+<div class="hint">
+    Каждый ключ — имя HTTP-заголовка.
+    Значение можно указывать напрямую, например
+    Authorization: Bearer ...
+</div>
+
+<label>
+    JSON Body
+    <textarea
+        id="wbody"
+        placeholder='{}'
+    ></textarea>
+</label>
+
+<div class="hint">
+    Для Home Assistant обычно достаточно:
+    {"..."} — фактическое содержимое зависит
+    от вызываемого API. Для пустого POST используйте {}.
+</div>
+
+<label>
+    <input
+        id="wenabled"
+        type="checkbox"
+        checked
+    >
+    Вебхук включён
+</label>
+
+<br>
+
+<button class="save">
+    Сохранить
+</button>
+
+<button
+    type="button"
+    onclick="resetWebhook()"
+>
+    Новый
+</button>
+
+<button
+    type="button"
+    onclick="testCurrentWebhook()"
+>
+    Тест
+</button>
+
+</form>
+
+</section>
+
+</main>
+
+
+<script>
+
+const $ = id =>
+    document.getElementById(id);
+
+
+async function api(url, options = {}) {
+
+    const r = await fetch(
+        url,
+        {
+            headers: {
+                "Content-Type":
+                    "application/json",
+                ...(options.headers || {})
+            },
+            ...options
+        }
+    );
+
+    if (!r.ok) {
+        throw Error(
+            await r.text()
+        );
+    }
+
+    return r.json();
+}
+
+
+function esc(v) {
+
+    return String(v ?? "")
+        .replace(
+            /[&<>"']/g,
+            m => ({
+                "&":"&amp;",
+                "<":"&lt;",
+                ">":"&gt;",
+                '"':"&quot;",
+                "'":"&#39;"
+            }[m])
+        );
+}
+
+
+/* =====================================================
+   TABS
+===================================================== */
+
+document
+    .querySelectorAll(".tabs button")
+    .forEach(b => {
+
+        b.onclick = async () => {
+
+            document
+                .querySelectorAll(
+                    ".tabs button,.panel"
+                )
+                .forEach(x =>
+                    x.classList.remove(
+                        "active"
+                    )
+                );
+
+            b.classList.add("active");
+
+            $(b.dataset.tab)
+                .classList.add("active");
+
+            if (
+                b.dataset.tab === "events"
+            ) {
+                loadEvents();
+            }
+
+            if (
+                b.dataset.tab === "webhooks"
+            ) {
+                loadWebhooks();
+            }
+
+            if (
+                b.dataset.tab === "cars"
+            ) {
+                if (!webhookCache.length) {
+                    await loadWebhooks();
+                }
+                await loadParkingCars();
+            }
+
+            if (
+                b.dataset.tab === "cams"
+            ) {
+                loadCams();
+            }
+        };
+    });
+
+
+/* =====================================================
+   WEBHOOKS
+===================================================== */
+
+let webhookCache = [];
+
+let parkingCarsCache = [];
+
+async function loadParkingCars() {
+    parkingCarsCache =
+        await api("/api/parking-cars");
+
+    const webhooks =
+        webhookCache || [];
+
+    const select =
+        $("parkingCarWebhook");
+
+    if (select) {
+        const current =
+            select.value;
+
+        select.innerHTML =
+            '<option value="">Не использовать</option>' +
+            webhooks.map(w =>
+                `<option value="${w.id}">
+                    ${esc(w.name)}
+                 </option>`
+            ).join("");
+
+        if (current) {
+            select.value = current;
+        }
+    }
+
+    const list =
+        $("parkingCarsList");
+
+    if (!list) return;
+
+    if (!parkingCarsCache.length) {
+        list.innerHTML =
+            '<p class="muted">Машины ещё не добавлены.</p>';
+        return;
+    }
+
+    list.innerHTML =
+        parkingCarsCache.map(c => {
+
+            const state =
+                c.state === "home"
+                    ? "ДОМА"
+                    : "НЕ ДОМА";
+
+            const stateClass =
+                c.state === "home"
+                    ? "home"
+                    : "away";
+
+            const webhook =
+                webhooks.find(
+                    w => w.id === c.webhook_id
+                );
+
+            return `
+<div class="parking-car-card">
+
+    <div class="row">
+        <strong>
+            ${esc(c.name)}
+        </strong>
+
+        <span>
+            ${esc(c.plate)}
+        </span>
+
+        <span class="parking-car-state ${stateClass}">
+            ${state}
+        </span>
+
+        ${
+            c.enabled
+                ? ""
+                : "<span>выключена</span>"
+        }
+    </div>
+
+    <div class="muted">
+        HOME:
+        ${esc(c.home_value)}
+        —
+        AWAY:
+        ${esc(c.away_value)}
+    </div>
+
+    <div class="muted">
+        Таймаут:
+        ${c.absence_timeout} сек.
+        ${
+            webhook
+                ? " · " + esc(webhook.name)
+                : ""
+        }
+    </div>
+
+    <div class="parking-car-actions">
+        <button type="button"
+                onclick="editParkingCar(${c.id})">
+            Изменить
+        </button>
+
+        <button type="button"
+                onclick="resetParkingCar(${c.id})">
+            Сбросить в «не дома»
+        </button>
+
+        <button type="button"
+                onclick="deleteParkingCar(${c.id})">
+            Удалить
+        </button>
+    </div>
+
+</div>
+`;
+        }).join("");
+}
+
+
+function editParkingCar(id) {
+
+    const c =
+        parkingCarsCache.find(
+            x => x.id === id
+        );
+
+    if (!c) return;
+
+    $("parkingCarId").value =
+        c.id;
+
+    $("parkingCarName").value =
+        c.name || "";
+
+    $("parkingCarPlate").value =
+        c.plate || "";
+
+    $("parkingCarWebhook").value =
+        c.webhook_id || "";
+
+    $("parkingCarHomeValue").value =
+        c.home_value || "";
+
+    $("parkingCarAwayValue").value =
+        c.away_value || "";
+
+    $("parkingCarAbsenceTimeout").value =
+        c.absence_timeout || 30;
+
+    $("parkingCarEnabled").checked =
+        !!c.enabled;
+}
+
+
+function resetParkingCarForm() {
+
+    $("parkingCarId").value = "";
+
+    $("parkingCarName").value = "";
+
+    $("parkingCarPlate").value = "";
+
+    $("parkingCarWebhook").value = "";
+
+    $("parkingCarHomeValue").value =
+        "home";
+
+    $("parkingCarAwayValue").value =
+        "away";
+
+    $("parkingCarAbsenceTimeout").value =
+        "30";
+
+    $("parkingCarEnabled").checked =
+        true;
+}
+
+
+async function resetParkingCar(id) {
+
+    if (!confirm(
+        "Сбросить состояние машины в «не дома»?"
+    )) {
+        return;
+    }
+
+    await api(
+        "/api/parking-cars/" +
+        id +
+        "/reset",
+        {
+            method: "POST"
+        }
+    );
+
+    await loadParkingCars();
+}
+
+
+async function deleteParkingCar(id) {
+
+    if (!confirm(
+        "Удалить эту машину?"
+    )) {
+        return;
+    }
+
+    await api(
+        "/api/parking-cars/" + id,
+        {
+            method: "DELETE"
+        }
+    );
+
+    resetParkingCarForm();
+
+    await loadParkingCars();
+}
+
+
+$("parkingCarForm").onsubmit =
+    async function(e) {
+
+        e.preventDefault();
+
+        const id =
+            $("parkingCarId").value;
+
+        const data = {
+            name:
+                $("parkingCarName").value.trim(),
+
+            plate:
+                $("parkingCarPlate").value.trim(),
+
+            enabled:
+                $("parkingCarEnabled").checked,
+
+            webhook_id:
+                $("parkingCarWebhook").value
+                    ? Number(
+                        $("parkingCarWebhook").value
+                      )
+                    : null,
+
+            home_value:
+                $("parkingCarHomeValue").value.trim(),
+
+            away_value:
+                $("parkingCarAwayValue").value.trim(),
+
+            absence_timeout:
+                Number(
+                    $("parkingCarAbsenceTimeout").value
+                ) || 30
+        };
+
+        await api(
+            id
+                ? "/api/parking-cars/" + id
+                : "/api/parking-cars",
+            {
+                method: id
+                    ? "PUT"
+                    : "POST",
+
+                headers: {
+                    "Content-Type":
+                        "application/json"
+                },
+
+                body:
+                    JSON.stringify(data)
+            }
+        );
+
+        resetParkingCarForm();
+
+        await loadParkingCars();
+    };
+
+
+$("parkingCarCancel").onclick =
+    function() {
+        resetParkingCarForm();
+    };
+
+
+
+
+async function loadWebhooks() {
+
+    webhookCache =
+        await api("/api/webhooks");
+
+    $("webhookList").innerHTML =
+        "<table>" +
+        "<tr>" +
+        "<th>ID</th>" +
+        "<th>Название</th>" +
+        "<th>URL</th>" +
+        "<th>Метод</th>" +
+        "<th>Статус</th>" +
+        "<th></th>" +
+        "</tr>" +
+
+        webhookCache.map(w => {
+
+            return `
+            <tr>
+                <td>${w.id}</td>
+
+                <td>
+                    <b>${esc(w.name)}</b>
+                </td>
+
+                <td>
+                    ${esc(w.url)}
+                </td>
+
+                <td>
+                    ${esc(w.method)}
+                </td>
+
+                <td>
+                    ${
+                        w.enabled
+                        ? "✓ включён"
+                        : "выключен"
+                    }
+                </td>
+
+                <td>
+                    <button
+                        onclick="editWebhook(${w.id})"
+                    >
+                        Изменить
+                    </button>
+
+                    <button
+                        onclick="testWebhook(${w.id})"
+                    >
+                        Тест
+                    </button>
+
+                    <button
+                        onclick="delWebhook(${w.id})"
+                    >
+                        Удалить
+                    </button>
+                </td>
+            </tr>
+            `;
+
+        }).join("") +
+
+        "</table>";
+
+    fillWebhookSelect();
+}
+
+
+function fillWebhookSelect() {
+
+    const current =
+        $("wh_id").value;
+
+    $("wh_id").innerHTML =
+        '<option value="">— не выбран —</option>' +
+
+        webhookCache
+            .filter(w => w.enabled)
+            .map(w =>
+                `<option value="${w.id}">
+                    ${esc(w.name)}
+                </option>`
+            )
+            .join("");
+
+    if (current) {
+        $("wh_id").value =
+            current;
+    }
+}
+
+
+function editWebhook(id) {
+
+    const w =
+        webhookCache.find(
+            x => x.id === id
+        );
+
+    if (!w) return;
+
+    $("wid").value = w.id;
+    $("wname").value = w.name;
+    $("wurl").value = w.url;
+    $("wmethod").value = w.method;
+    $("wtimeout").value = w.timeout;
+
+    $("wheaders").value =
+        w.headers_json ||
+        '{"Content-Type":"application/json"}';
+
+    $("wbody").value =
+        w.body_json || "{}";
+
+    $("wenabled").checked =
+        w.enabled;
+
+    document
+        .querySelector(
+            '[data-tab="webhooks"]'
+        )
+        .click();
+
+    window.scrollTo({
+        top: 0,
+        behavior: "smooth"
+    });
+}
+
+
+function resetWebhook() {
+
+    $("webhookForm").reset();
+
+    $("wid").value = "";
+    $("wmethod").value = "POST";
+    $("wtimeout").value = 20;
+
+    $("wheaders").value =
+        '{"Content-Type":"application/json"}';
+
+    $("wbody").value = "{}";
+
+    $("wenabled").checked = true;
+}
+
+
+async function saveWebhook() {
+
+    const id =
+        $("wid").value;
+
+    const x = {
+        name:
+            $("wname").value.trim(),
+
+        url:
+            $("wurl").value.trim(),
+
+        method:
+            $("wmethod").value,
+
+        timeout:
+            +$("wtimeout").value,
+
+        headers_json:
+            $("wheaders").value.trim(),
+
+        body_json:
+            $("wbody").value.trim(),
+
+        enabled:
+            $("wenabled").checked
+    };
+
+    await api(
+        id
+            ? "/api/webhooks/" + id
+            : "/api/webhooks",
+        {
+            method:
+                id ? "PUT" : "POST",
+
+            body:
+                JSON.stringify(x)
+        }
+    );
+
+    resetWebhook();
+
+    await loadWebhooks();
+
+    alert("Webhook сохранён");
+}
+
+
+$("webhookForm").onsubmit =
+    async e => {
+
+        e.preventDefault();
+
+        try {
+            await saveWebhook();
+        }
+        catch (e) {
+            alert(e);
+        }
+    };
+
+
+async function testWebhook(id) {
+
+    try {
+
+        const result =
+            await api(
+                "/api/webhooks/" +
+                id +
+                "/test",
+                {
+                    method: "POST"
+                }
+            );
+
+        alert(
+            "HTTP " +
+            result.status_code +
+            "\n\n" +
+            result.response
+        );
+
+    }
+    catch (e) {
+        alert(e);
+    }
+}
+
+
+async function testCurrentWebhook() {
+
+    const id =
+        $("wid").value;
+
+    if (!id) {
+        alert(
+            "Сначала сохраните webhook"
+        );
+        return;
+    }
+
+    await testWebhook(id);
+}
+
+
+async function delWebhook(id) {
+
+    if (
+        !confirm(
+            "Удалить webhook?"
+        )
+    ) {
+        return;
+    }
+
+    try {
+
+        await api(
+            "/api/webhooks/" +
+            id,
+            {
+                method: "DELETE"
+            }
+        );
+
+        await loadWebhooks();
+        await loadCams();
+
+    }
+    catch (e) {
+        alert(e);
+    }
+}
+
+
+/* =====================================================
+   CAMERAS
+===================================================== */
+
+async function loadCams() {
+
+    const a =
+        await api("/api/cameras");
+
+    fillWebhookSelect();
+
+    $("cameraList").innerHTML =
+        "<table>" +
+
+        "<tr>" +
+        "<th>ID</th>" +
+        "<th>Название</th>" +
+        "<th>Режим</th>" +
+        "<th>Статус</th>" +
+        "<th>Срабатывание номера</th>" +
+        "<th>Кулдаун / таймаут</th>" +
+        "<th>Webhook</th>" +
+        "<th></th>" +
+        "</tr>" +
+
+        a.map(c => {
+
+            let wh = "—";
+
+            if (
+                c.webhook_enabled &&
+                c.webhook_plate
+            ) {
+                const w =
+                    webhookCache.find(
+                        x =>
+                            x.id ===
+                            c.webhook_id
+                    );
+
+                wh =
+                    "✓ " +
+                    esc(
+                        w
+                            ? w.name
+                            : c.webhook_plate
+                    ) +
+                    " / " +
+                    esc(
+                        c.webhook_plate
+                    );
+            }
+
+            return `
+            <tr>
+
+                <td>${c.id}</td>
+
+                <td>
+                    ${esc(c.name)}
+                </td>
+
+                <td>
+                    ${esc(c.mode)}
+                </td>
+
+                <td>
+                    ${esc(c.status)}
+                </td>
+
+                <td>
+                    ${
+                        c.plate_trigger_mode === "until_gone"
+                        ? "До исчезновения"
+                        : "Кулдаун"
+                    }
+                </td>
+
+                <td>
+                    ${c.plate_cooldown_seconds}s
+                </td>
+
+                <td>
+                    ${wh}
+                </td>
+
+                <td>
+
+                    <button
+                        onclick='editCam(${JSON.stringify(c)})'
+                    >
+                        Изменить
+                    </button>
+
+                    <button
+                        onclick='testCam(${c.id})'
+                    >
+                        Тест
+                    </button>
+
+                    <button
+                        onclick='delCam(${c.id})'
+                    >
+                        Удалить
+                    </button>
+
+                </td>
+
+            </tr>
+            `;
+
+        }).join("") +
+
+        "</table>";
+}
+
+
+async function testCam(id) {
+    try {
+        const result =
+            await api(`/api/cameras/${id}/test`, {
+                method: "POST"
+            });
+
+        alert(
+            result.message ||
+            "Кадр отправлен в ANPR"
+        );
+    } catch (e) {
+        alert(
+            e.message ||
+            "Ошибка теста камеры"
+        );
+    }
+}
+
+
+function toggleSourceUI() {
+    const src = $("source_type").value;
+    const isHa = src === "ha_camera";
+    $("haEntityLabel").style.display = isHa ? "" : "none";
+    $("rtspBlock").style.display = isHa ? "none" : "";
+}
+
+function editCam(c) {
+
+    $("cid").value = c.id;
+
+    $("name").value =
+        c.name;
+
+    $("purpose").value =
+        c.purpose || "entry";
+
+    $("source_type").value =
+        c.source_type || "rtsp";
+
+    $("ha_entity_id").value =
+        c.ha_entity_id || "";
+
+    $("rtsp").value =
+        c.rtsp_url || "";
+
+    $("user").value =
+        c.username;
+
+    $("pass").value = "";
+
+    $("mode").value =
+        c.mode;
+
+    $("interval").value =
+        c.interval_seconds;
+
+    $("frames").value =
+        c.frame_count;
+
+    $("delay").value =
+        c.frame_delay_ms;
+
+    $("mt").value =
+        c.motion_threshold;
+
+    $("mr").value =
+        c.motion_min_changed_ratio;
+
+    $("mi").value =
+        c.motion_idle_timeout;
+
+    $("mc").value =
+        c.motion_cooldown;
+
+    $("pc").value =
+        c.plate_cooldown_seconds;
+
+    $("plateTriggerMode").value =
+        c.plate_trigger_mode || "cooldown";
+
+    toggleSourceUI();
+
+    $("wh_en").checked =
+        c.webhook_enabled;
+
+    $("wh_id").value =
+        c.webhook_id || "";
+
+    $("wh_plate").value =
+        c.webhook_plate || "";
+
+    $("enabled").checked =
+        c.enabled;
+
+    $("ctg").checked =
+        c.telegram_enabled;
+}
+
+
+function resetCam() {
+
+    $("camForm").reset();
+
+    $("cid").value = "";
+
+    $("frames").value = 3;
+    $("delay").value = 250;
+    $("mt").value = 25;
+    $("mr").value = .01;
+    $("mi").value = 2;
+    $("mc").value = 10;
+    $("pc").value = 30;
+    $("plateTriggerMode").value = "cooldown";
+
+    $("enabled").checked = true;
+    $("ctg").checked = true;
+    $("wh_en").checked = false;
+    $("wh_id").value = "";
+}
+
+
+async function delCam(id) {
+
+    if (
+        !confirm(
+            "Удалить?"
+        )
+    ) {
+        return;
+    }
+
+    await api(
+        "/api/cameras/" + id,
+        {
+            method: "DELETE"
+        }
+    );
+
+    loadCams();
+}
+
+
+// RTSP auto-discovery
+$("btnDiscoverRtsp").onclick = async () => {
+    const host = ($("cam_host").value || "").trim();
+    const status = $("rtspStatus");
+    if (!host) {
+        status.textContent = "Укажите Host / IP";
+        status.style.color = "#c00";
+        return;
+    }
+    status.textContent = "Идёт автоопределение…";
+    status.style.color = "#888";
+    try {
+        const r = await api("/api/rtsp/discover", {
+            method: "POST",
+            body: JSON.stringify({
+                host: host,
+                username: $("user").value || "",
+                password: $("pass").value || "",
+                port: 554,
+            }),
+        });
+        if (r.success && r.rtsp_url) {
+            $("rtsp").value = r.rtsp_url;
+            status.textContent = "✓ " + (r.message || "RTSP определён") + " → " + (r.path || "");
+            status.style.color = "#0a0";
+        } else {
+            status.textContent = "✗ " + (r.message || "Не удалось") + ". Укажите URL вручную.";
+            status.style.color = "#c00";
+        }
+    } catch (err) {
+        status.textContent = "Ошибка: " + err;
+        status.style.color = "#c00";
+    }
+};
+
+$("btnVerifyRtsp").onclick = async () => {
+    const url = ($("rtsp").value || "").trim();
+    const status = $("rtspStatus");
+    if (!url) {
+        status.textContent = "RTSP URL пустой";
+        status.style.color = "#c00";
+        return;
+    }
+    status.textContent = "Проверка потока…";
+    status.style.color = "#888";
+    try {
+        const r = await api("/api/rtsp/verify", {
+            method: "POST",
+            body: JSON.stringify({ rtsp_url: url }),
+        });
+        if (r.success) {
+            status.textContent = "✓ " + (r.message || "Поток OK");
+            status.style.color = "#0a0";
+        } else {
+            status.textContent = "✗ " + (r.message || "Не удалось открыть");
+            status.style.color = "#c00";
+        }
+    } catch (err) {
+        status.textContent = "Ошибка: " + err;
+        status.style.color = "#c00";
+    }
+};
+
+
+$("source_type").onchange = toggleSourceUI;
+
+$("camForm").onsubmit =
+    async e => {
+
+        e.preventDefault();
+
+        const purpose = $("purpose").value;
+        const sourceType = $("source_type").value;
+
+        const x = {
+
+            name:
+                $("name").value,
+
+            enabled:
+                $("enabled").checked,
+
+            purpose: purpose,
+            source_type: sourceType,
+            ha_entity_id: $("ha_entity_id").value || "",
+
+            rtsp_url:
+                $("rtsp").value || "",
+
+            username:
+                $("user").value,
+
+            password:
+                $("pass").value ||
+                null,
+
+            mode:
+                $("mode").value,
+
+            interval_seconds:
+                +$("interval").value,
+
+            frame_count:
+                +$("frames").value,
+
+            frame_delay_ms:
+                +$("delay").value,
+
+            motion_threshold:
+                +$("mt").value,
+
+            motion_min_changed_ratio:
+                +$("mr").value,
+
+            motion_idle_timeout:
+                +$("mi").value,
+
+            motion_cooldown:
+                +$("mc").value,
+
+            plate_cooldown_seconds:
+                +$("pc").value,
+
+            plate_trigger_mode:
+                purpose === "parking"
+                    ? "until_gone"
+                    : $("plateTriggerMode").value,
+
+            telegram_enabled:
+                $("ctg").checked,
+
+            webhook_enabled:
+                $("wh_en").checked,
+
+            webhook_id:
+                $("wh_id").value
+                    ? +$("wh_id").value
+                    : null,
+
+            webhook_plate:
+                $("wh_plate")
+                    .value
+                    .trim()
+                    .toUpperCase()
+        };
+
+        try {
+
+            await api(
+                $("cid").value
+                    ? "/api/cameras/" +
+                      $("cid").value
+                    : "/api/cameras",
+                {
+                    method:
+                        $("cid").value
+                            ? "PUT"
+                            : "POST",
+
+                    body:
+                        JSON.stringify(x)
+                }
+            );
+
+            resetCam();
+
+            await loadCams();
+
+            alert(
+                "Камера сохранена"
+            );
+
+        }
+        catch (e) {
+            alert(e);
+        }
+    };
+
+
+/* =====================================================
+   EVENTS
+===================================================== */
+
+async function loadEvents() {
+
+    const a =
+        await api("/api/events");
+
+    $("eventList").innerHTML =
+        "<table>" +
+
+        "<tr>" +
+        "<th>Фото</th>" +
+        "<th>Время</th>" +
+        "<th>Камера</th>" +
+        "<th>Номер</th>" +
+        "<th>OCR</th>" +
+        "<th>TG</th>" +
+        "<th>Webhook</th>" +
+        "</tr>" +
+
+        a.map(e => {
+
+            return `
+            <tr>
+
+                <td>
+                    <img
+                        class="thumb"
+                        src="${e.image}"
+                    >
+                </td>
+
+                <td>
+                    ${new Date(
+                        e.timestamp
+                    ).toLocaleString()}
+                </td>
+
+                <td>
+                    ${e.camera_id}
+                </td>
+
+                <td>
+                    <b>
+                        ${esc(e.plate)}
+                    </b>
+                </td>
+
+                <td>
+                    ${Number(
+                        e.ocr_confidence
+                    ).toFixed(2)}
+                </td>
+
+                <td>
+                    ${
+                        e.telegram_sent
+                        ? "✓"
+                        : "—"
+                    }
+                </td>
+
+                <td>
+                    ${
+                        e.webhook_sent
+                        ? "✓"
+                        : (
+                            e.webhook_error
+                            ? "✗"
+                            : "—"
+                        )
+                    }
+                </td>
+
+            </tr>
+            `;
+
+        }).join("") +
+
+        "</table>";
+}
+
+
+/* =====================================================
+   TELEGRAM
+===================================================== */
+
+async function loadTG() {
+
+    const s =
+        await api("/api/telegram");
+
+    $("tgen").checked =
+        s.enabled;
+
+    $("chat").value =
+        s.chat_id;
+
+    $("thread").value =
+        s.thread_id;
+
+    $("proxyen").checked =
+        s.proxy_enabled;
+
+    $("phost").value =
+        s.proxy_host;
+
+    $("pport").value =
+        s.proxy_port;
+}
+
+
+$("tgForm").onsubmit =
+    async e => {
+
+        e.preventDefault();
+
+        await api(
+            "/api/telegram",
+            {
+                method: "PUT",
+
+                body: JSON.stringify({
+                    enabled:
+                        $("tgen").checked,
+
+                    bot_token:
+                        $("token").value ||
+                        null,
+
+                    chat_id:
+                        $("chat").value,
+
+                    thread_id:
+                        $("thread").value,
+
+                    proxy_enabled:
+                        $("proxyen").checked,
+
+                    proxy_host:
+                        $("phost").value,
+
+                    proxy_port:
+                        +$("pport").value
+                })
+            }
+        );
+
+        $("token").value = "";
+
+        alert(
+            "Сохранено"
+        );
+    };
+
+
+async function testTG() {
+
+    try {
+
+        await api(
+            "/api/telegram/test",
+            {
+                method: "POST"
+            }
+        );
+
+        alert(
+            "Отправлено"
+        );
+
+    }
+    catch (e) {
+        alert(e);
+    }
+}
+
+
+/* =====================================================
+   ANPR
+===================================================== */
+
+async function loadANPR() {
+
+    const s =
+        await api("/api/anpr");
+
+    $("conf").value =
+        s.confidence;
+
+    $("votes").value =
+        s.vote_frames;
+
+    $("device").value =
+        s.device;
+}
+
+
+$("anprForm").onsubmit =
+    async e => {
+
+        e.preventDefault();
+
+        await api(
+            "/api/anpr",
+            {
+                method: "PUT",
+
+                body: JSON.stringify({
+                    confidence:
+                        +$("conf").value,
+
+                    vote_frames:
+                        +$("votes").value,
+
+                    device:
+                        $("device").value
+                })
+            }
+        );
+
+        alert(
+            "Сохранено"
+        );
+    };
+
+
+/* =====================================================
+   APP
+===================================================== */
+
+async function loadApp() {
+
+    const s =
+        await api("/api/app");
+
+    $("ret").value =
+        s.snapshot_retention_days;
+
+    $("sync").value =
+        s.sync_seconds;
+}
+
+
+$("appForm").onsubmit =
+    async e => {
+
+        e.preventDefault();
+
+        await api(
+            "/api/app",
+            {
+                method: "PUT",
+
+                body: JSON.stringify({
+                    snapshot_retention_days:
+                        +$("ret").value,
+
+                    sync_seconds:
+                        +$("sync").value
+                })
+            }
+        );
+
+        alert(
+            "Сохранено"
+        );
+    };
+
+
+/* =====================================================
+   START
+===================================================== */
+
+(async () => {
+
+    try {
+
+        await api(
+            "/api/health"
+        );
+
+        $("health").textContent =
+            "● online";
+
+        await loadWebhooks();
+        await loadCams();
+        await loadTG();
+        await loadANPR();
+        await loadApp();
+
+    }
+    catch (e) {
+
+        console.error(e);
+
+        $("health").textContent =
+            "offline";
+    }
+
+})();
+
+setInterval(
+    () => loadCams().catch(console.error),
+    5000
+);
+
+</script>
+
+</body>
+</html>
